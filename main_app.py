@@ -36,6 +36,23 @@ KEYWORD_MAPPING = {
     "game": "game development interactive design programming unity multimedia",
 }
 
+# --- DATA DESKRIPSI JURUSAN (BARU) ---
+PROGRAM_DESCRIPTIONS = {
+    "Informatika": "Mempelajari pengembangan software, teknologi jaringan, dan komputasi cerdas untuk solusi masa depan.",
+    "Sistem Informasi": "Menggabungkan ilmu komputer dengan manajemen bisnis untuk mengelola sistem perusahaan.",
+    "Manajemen": "Fokus pada pengelolaan bisnis, strategi pemasaran, keuangan, dan kepemimpinan organisasi.",
+    "Akuntansi": "Ahli dalam pencatatan, analisis, dan pelaporan keuangan untuk keputusan bisnis yang akurat.",
+    "Ilmu Komunikasi": "Mempelajari strategi penyampaian pesan efektif melalui media digital, humas, dan jurnalistik.",
+    "Hospitality dan Pariwisata": "Menyiapkan profesional di bidang perhotelan, kuliner, dan manajemen destinasi wisata.",
+    "Desain Komunikasi Visual": "Mengembangkan solusi komunikasi visual yang kreatif, artistik, dan inovatif.",
+    "Bahasa Inggris": "Mendalami bahasa, sastra, dan budaya Inggris untuk komunikasi profesional global.",
+    "Bahasa Mandarin": "Mempelajari bahasa dan budaya Tiongkok untuk keunggulan bisnis internasional.",
+    "Bisnis Digital": "Mengintegrasikan teknologi digital canggih dalam strategi dan operasional bisnis modern.",
+    "Data Science": "Mengolah data besar (Big Data) menjadi wawasan berharga untuk prediksi dan keputusan.",
+    "Desain Interaktif": "Fokus pada perancangan pengalaman pengguna (UX) dan antarmuka (UI) game serta media interaktif.",
+    "Psikologi": "Mempelajari perilaku manusia dan proses mental untuk kesejahteraan individu dan organisasi."
+}
+
 @st.cache_data
 def load_data():
     try:
@@ -46,6 +63,57 @@ def load_data():
     except FileNotFoundError:
         st.error("File CSV tidak ditemukan. Pastikan file 'List Mata Kuliah UBM.xlsx - Sheet1.csv' ada di folder yang sama.")
         return pd.DataFrame()
+
+def get_program_description(program_name):
+    """Mencari deskripsi yang cocok berdasarkan nama jurusan."""
+    for key, desc in PROGRAM_DESCRIPTIONS.items():
+        if key in program_name:
+            return desc
+    return "Jurusan unggulan yang siap mencetak profesional handal di bidangnya."
+
+def get_course_advice(course_name):
+    """
+    Memberikan tips dan deskripsi umum berdasarkan kata kunci pada nama mata kuliah.
+    Ini adalah 'Smart Logic' karena kita tidak punya data tips spesifik per matkul.
+    """
+    course_lower = course_name.lower()
+    
+    if any(x in course_lower for x in ['matematika', 'kalkulus', 'statistika', 'akuntansi', 'keuangan', 'fisika']):
+        return {
+            "desc": "Mata kuliah ini banyak melibatkan logika, rumus, perhitungan, dan ketelitian angka.",
+            "tip": "💡 **Tips Sukses:** Jangan hanya menghapal rumus, tapi pahami konsep dasarnya. Perbanyak latihan soal mandiri agar terbiasa dengan berbagai variasi kasus perhitungan."
+        }
+    elif any(x in course_lower for x in ['program', 'coding', 'algoritma', 'data', 'sistem', 'web', 'mobile', 'software']):
+        return {
+            "desc": "Fokus pada pengembangan logika teknis, struktur data, dan penulisan kode (coding) untuk membangun aplikasi.",
+            "tip": "💻 **Tips Sukses:** Praktek langsung (ngoding) jauh lebih efektif daripada cuma baca teori. Jangan takut error, itu bagian dari proses belajar! Manfaatkan sumber belajar online seperti StackOverflow."
+        }
+    elif any(x in course_lower for x in ['desain', 'gambar', 'visual', 'art', 'sketsa', 'nirmana', 'tipografi']):
+        return {
+            "desc": "Mengasah kreativitas, estetika, rasa seni, dan kemampuan visualisasi ide ke dalam bentuk karya.",
+            "tip": "🎨 **Tips Sukses:** Sering-sering cari referensi (Pinterest/Behance) untuk memperkaya wawasan visual. Mulai bangun portofolio dari tugas-tugas kuliah ini. Jangan ragu eksperimen gaya baru!"
+        }
+    elif any(x in course_lower for x in ['bisnis', 'manajemen', 'marketing', 'pemasaran', 'ekonomi', 'entrepreneur']):
+        return {
+            "desc": "Mempelajari strategi bisnis, pengelolaan organisasi, dinamika pasar, dan perilaku konsumen.",
+            "tip": "📊 **Tips Sukses:** Perbanyak baca studi kasus nyata (case study) perusahaan. Latih kemampuan presentasi dan networking karena soft skill ini sangat krusial di dunia bisnis."
+        }
+    elif any(x in course_lower for x in ['bahasa', 'english', 'mandarin', 'komunikasi', 'writing', 'speaking']):
+        return {
+            "desc": "Meningkatkan kemampuan verbal dan non-verbal untuk komunikasi efektif dalam konteks profesional.",
+            "tip": "🗣️ **Tips Sukses:** Kuncinya adalah 'Active Speaking'. Jangan malu salah grammar saat bicara, yang penting berani ngomong dulu! Praktikkan dengan teman atau native speaker jika ada kesempatan."
+        }
+    elif any(x in course_lower for x in ['hotel', 'wisata', 'tour', 'kitchen', 'pastry', 'food']):
+        return {
+            "desc": "Mata kuliah praktikal yang berhubungan langsung dengan industri pelayanan, kuliner, dan pariwisata.",
+            "tip": "👨‍🍳 **Tips Sukses:** Perhatikan detail kebersihan (hygiene) dan standar pelayanan (service excellence). Disiplin dan attitude adalah nilai jual utama di industri hospitality."
+        }
+    else:
+        # Default tips jika tidak ada kata kunci yang cocok
+        return {
+            "desc": "Mata kuliah ini dirancang untuk memperkuat kompetensi dasar atau keahlian spesifik di jurusan kamu.",
+            "tip": "📝 **Tips Sukses:** Catat poin-poin penting dosen yang tidak ada di slide. Aktif bertanya dan berdiskusi di kelas bisa jadi nilai tambah untuk pemahamanmu."
+        }
 
 def detect_chatbot_responses(user_input):
     user_input_lower = user_input.lower()
@@ -261,16 +329,32 @@ def local_css():
     }
     
     /* --- TEKS UMUM (PUTIH) --- */
-    /* Agar teks di atas background ungu terbaca */
     h1, h2, h3, .css-10trblm, .stMarkdown p, .stMarkdown li, label {
         color: white !important;
     }
 
     /* --- KARTU HASIL (HITAM) --- */
-    /* Kita buat aturan KHUSUS (Specificity tinggi) untuk kartu hasil */
-    /* Tanda bintang (*) artinya SEMUA elemen di dalam kartu ini dipaksa hitam */
     .result-card, .result-card div, .result-card h3, .result-card p {
-        color: #31333F !important; /* Warna Hitam Abu-abu Gelap (Standar Streamlit) */
+        color: #31333F !important; 
+    }
+    
+    /* --- EXPANDER TIPS (HITAM) --- */
+    /* Mengatur warna teks di dalam expander agar hitam */
+    .streamlit-expanderHeader {
+        color: #31333F !important;
+        font-weight: 600;
+        background-color: #e6e9ef !important;
+        border-radius: 8px;
+    }
+    .streamlit-expanderContent {
+        background-color: #ffffff !important;
+        color: #31333F !important;
+        border-bottom-left-radius: 8px;
+        border-bottom-right-radius: 8px;
+        border: 1px solid #e6e9ef;
+    }
+    .streamlit-expanderContent p, .streamlit-expanderContent li {
+        color: #31333F !important; /* Paksa teks hitam di dalam tips */
     }
 
     /* --- SIDEBAR (HITAM) --- */
@@ -464,9 +548,12 @@ def main_app():
             if not recs.empty:
                 st.subheader(f"Hasil: {len(recs)} Mata Kuliah")
                 for idx, row in recs.iterrows():
-                    # === PERBAIKAN: Menambahkan class 'result-card' agar dibaca CSS ===
+                    prog_desc = get_program_description(row['Program'])
+                    advice = get_course_advice(row['Course']) # Ambil Tips Cerdas
+
+                    # Kartu Hasil (Warna Abu muda #f0f2f6 & Teks Hitam)
                     st.markdown(f"""
-                    <div class="result-card" style="background: #f0f2f6; padding: 20px; border-radius: 15px; margin-bottom: 15px;">
+                    <div class="result-card" style="background: #f0f2f6; padding: 20px; border-radius: 15px; margin-bottom: 15px; border-left: 5px solid #667eea;">
                         <h3 style="margin:0; font-weight: 700;">{row['Course']}</h3>
                         <p style="margin:5px 0 0 0; font-size: 0.9rem;">
                             🎓 {row['Program']} | 📅 Semester {row['Semester']} | ⭐ {row['Similarity Score']}%
@@ -474,13 +561,26 @@ def main_app():
                     </div>
                     """, unsafe_allow_html=True)
                     
+                    # --- BAGIAN EXPANDER (TIPS & DESKRIPSI) ---
+                    # Ini bisa di-klik untuk Show/Hide
+                    with st.expander(f"💡 Lihat Tips & Deskripsi Matkul: {row['Course']}"):
+                        st.markdown(f"""
+                        **ℹ️ Deskripsi:** {prog_desc}
+                        
+                        ---
+                        {advice['tip']}
+                        """)
+
+                    # Tombol Simpan Bookmark
                     is_saved = any(b['Course'] == row['Course'] for b in st.session_state.bookmarks)
                     if not is_saved:
-                        if st.button(f"🔖 Simpan {row['Course']}", key=f"save_{idx}"):
+                        if st.button(f"🔖 Simpan", key=f"save_{idx}"):
                             st.session_state.bookmarks.append(row.to_dict())
                             st.rerun()
                     else:
-                        st.button(f"✅ Tersimpan {row['Course']}", key=f"saved_{idx}", disabled=True)
+                        st.button(f"✅ Tersimpan", key=f"saved_{idx}", disabled=True)
+                    
+                    st.markdown("<br>", unsafe_allow_html=True) # Spacer antar kartu
             else:
                 st.warning("Tidak ditemukan yang cocok.")
 

@@ -4,6 +4,7 @@ import re
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 from textblob import TextBlob
+from itertools import chain # Tambahan untuk menggabungkan list
 
 # ==========================================
 # BAGIAN 1: LOGIKA & DATA (BACKEND)
@@ -222,17 +223,27 @@ def analyze_sentiment(user_input):
     except:
         return {'polarity': 0, 'subjectivity': 0, 'sentiment': 'neutral'}
 
-def expand_query(user_query):
+def expand_query(user_query, selected_keywords=None):
     expanded_query = user_query.lower()
     
+    # 1. Expand dari KEYWORD_MAPPING
     for keyword, expansion in KEYWORD_MAPPING.items():
         if keyword in expanded_query:
             expanded_query += ' ' + expansion
     
+    # 2. Tambahkan keyword yang dipilih pengguna
+    if selected_keywords:
+        for keyword in selected_keywords:
+            if keyword in KEYWORD_MAPPING:
+                expanded_query += ' ' + KEYWORD_MAPPING[keyword]
+            else:
+                # Untuk keyword yang tidak ada di mapping (mungkin hanya kata kunci utama)
+                expanded_query += ' ' + keyword
+    
     return expanded_query
 
-def get_recommendations(user_query, df_filtered, words_to_remove=None, top_n=10):
-    if not user_query.strip():
+def get_recommendations(user_query, df_filtered, words_to_remove=None, selected_keywords=None, top_n=10):
+    if not user_query.strip() and not selected_keywords:
         return pd.DataFrame()
     
     if df_filtered.empty:
@@ -245,7 +256,8 @@ def get_recommendations(user_query, df_filtered, words_to_remove=None, top_n=10)
     if df_filtered.empty:
         return pd.DataFrame()
     
-    expanded_query = expand_query(user_query)
+    # Gunakan selected_keywords dalam proses expansion
+    expanded_query = expand_query(user_query, selected_keywords)
     
     tfidf_vectorizer = TfidfVectorizer(stop_words='english')
     tfidf_matrix = tfidf_vectorizer.fit_transform(df_filtered['combined_features'])
@@ -466,14 +478,23 @@ def render_landing_page():
     with col3:
         st.markdown('<div class="feature-card"><div class="feature-icon">✨</div><div class="feature-title">Mudah Digunakan</div><div class="feature-desc">Tinggal ketik & tanya</div></div>', unsafe_allow_html=True)
 
+# Tambahan: Ambil Keyword Utama dari Mapping
+def get_main_keywords():
+    return sorted(list(KEYWORD_MAPPING.keys()))
+
 def main_app():
     df = load_data()
     
+    # Inisialisasi session state untuk keyword yang dipilih
+    if 'selected_keywords' not in st.session_state:
+        st.session_state.selected_keywords = []
+
     # --- SIDEBAR ---
     with st.sidebar:
         st.title("🔍 Menu")
         if st.button("🏠 Home"):
             st.session_state['app_started'] = False
+            st.session_state.selected_keywords = [] # Reset keyword
             st.rerun()
         
         st.markdown("---")
@@ -490,9 +511,11 @@ def main_app():
             with st.expander("Lihat Daftar"):
                 for idx, bm in enumerate(st.session_state.bookmarks):
                     st.markdown(f"**{bm['Course']}**")
-                    if st.button("Hapus", key=f"del_{idx}"):
-                        st.session_state.bookmarks.pop(idx)
-                        st.rerun()
+                    # Menggunakan st.form dan st.form_submit_button untuk tombol di dalam expander
+                    with st.form(key=f"del_form_{idx}"):
+                        if st.form_submit_button("Hapus", type="secondary"):
+                            st.session_state.bookmarks.pop(idx)
+                            st.rerun()
                     st.divider()
             if st.button("Clear All"):
                 st.session_state.bookmarks = []
@@ -516,9 +539,8 @@ def main_app():
     ### 💡 Cara Menggunakan:
     1. **Pilih Filter** di sidebar (jurusan & semester) - opsional.
     2. **Ketik minat/hobi** kamu dengan bahasa santai.
-    3. Sistem akan mencari mata kuliah yang **cocok** dengan minat kamu.
+    3. Jika kamu ragu, tambahkan **Keyword Pembantu** di bawah input teks.
     4. Klik tombol **Cari** untuk melihat hasil!
-    5. Semakin tinggi skor, semakin cocok mata kuliah tersebut.
     """)
     st.markdown("<br>", unsafe_allow_html=True)
 
@@ -532,59 +554,88 @@ def main_app():
     # 2. INPUT SECTION
     c_in, c_btn = st.columns([4, 1])
     with c_in:
-        user_input = st.text_area("Minat", placeholder="Contoh: Saya suka desain tapi tidak suka hitungan...", height=80, label_visibility="collapsed")
+        user_input = st.text_area("Minat", placeholder="Contoh: Saya suka desain tapi tidak suka hitungan...", height=80, key="user_input_area", label_visibility="collapsed")
     with c_btn:
         st.markdown("<br>", unsafe_allow_html=True) 
         btn_cari = st.button("Cari 🚀")
+    
+    # Bagian Baru: Memilih Keyword
+    # Menggunakan session state untuk menyimpan pilihan keyword
+    
+    # 3. SELECT KEYWORD SECTION
+    st.markdown("### ✨ Keyword Pembantu (Opsional)")
+    
+    # Menampilkan daftar keyword untuk dipilih
+    main_keywords = get_main_keywords()
+    
+    # Gunakan st.multiselect untuk memilih beberapa keyword
+    selected_keywords_update = st.multiselect(
+        "Pilih kata kunci yang paling mewakili minatmu:",
+        options=main_keywords,
+        default=st.session_state.selected_keywords,
+        key="keyword_multiselect"
+    )
+    # Update session state saat ada perubahan
+    st.session_state.selected_keywords = selected_keywords_update
 
-    # 3. HASIL PENCARIAN
-    if btn_cari and user_input:
-        st.markdown("---")
-        with st.spinner("Sedang berpikir..."):
-            detect_chatbot_responses(user_input)
-            cleaned_input, words_to_remove = process_negation(user_input)
-            recs = get_recommendations(cleaned_input, df_filtered, words_to_remove)
-            
-            if not recs.empty:
-                st.subheader(f"Hasil: {len(recs)} Mata Kuliah")
-                for idx, row in recs.iterrows():
-                    prog_desc = get_program_description(row['Program'])
-                    advice = get_course_advice(row['Course']) # Ambil Tips Cerdas
+    # 4. HASIL PENCARIAN
+    if btn_cari:
+        if not user_input and not st.session_state.selected_keywords:
+            st.warning("Mohon masukkan minat kamu atau pilih minimal satu Keyword Pembantu!")
+        else:
+            st.markdown("---")
+            with st.spinner("Sedang berpikir..."):
+                detect_chatbot_responses(user_input)
+                cleaned_input, words_to_remove = process_negation(user_input)
+                
+                # Panggil get_recommendations dengan selected_keywords
+                recs = get_recommendations(cleaned_input, df_filtered, words_to_remove, st.session_state.selected_keywords)
+                
+                if not recs.empty:
+                    st.subheader(f"Hasil: {len(recs)} Mata Kuliah")
+                    for idx, row in recs.iterrows():
+                        prog_desc = get_program_description(row['Program'])
+                        advice = get_course_advice(row['Course']) # Ambil Tips Cerdas
 
-                    # Kartu Hasil (Warna Abu muda #f0f2f6 & Teks Hitam)
-                    st.markdown(f"""
-                    <div class="result-card" style="background: #f0f2f6; padding: 20px; border-radius: 15px; margin-bottom: 15px; border-left: 5px solid #667eea;">
-                        <h3 style="margin:0; font-weight: 700;">{row['Course']}</h3>
-                        <p style="margin:5px 0 0 0; font-size: 0.9rem;">
-                            🎓 {row['Program']} | 📅 Semester {row['Semester']} | ⭐ {row['Similarity Score']}%
-                        </p>
-                    </div>
-                    """, unsafe_allow_html=True)
-                    
-                    # --- BAGIAN EXPANDER (TIPS & DESKRIPSI) ---
-                    # Ini bisa di-klik untuk Show/Hide
-                    with st.expander(f"💡 Lihat Tips & Deskripsi Matkul: {row['Course']}"):
+                        # Kartu Hasil (Warna Abu muda #f0f2f6 & Teks Hitam)
                         st.markdown(f"""
-                        **ℹ️ Deskripsi:** {prog_desc}
+                        <div class="result-card" style="background: #f0f2f6; padding: 20px; border-radius: 15px; margin-bottom: 15px; border-left: 5px solid #667eea;">
+                            <h3 style="margin:0; font-weight: 700;">{row['Course']}</h3>
+                            <p style="margin:5px 0 0 0; font-size: 0.9rem;">
+                                🎓 {row['Program']} | 📅 Semester {row['Semester']} | ⭐ {row['Similarity Score']}%
+                            </p>
+                        </div>
+                        """, unsafe_allow_html=True)
                         
-                        ---
-                        {advice['tip']}
-                        """)
+                        # --- BAGIAN EXPANDER (TIPS & DESKRIPSI) ---
+                        with st.expander(f"💡 Lihat Tips & Deskripsi Matkul: {row['Course']}"):
+                            st.markdown(f"""
+                            **ℹ️ Deskripsi Jurusan:** {prog_desc}
+                            
+                            ---
+                            
+                            **📝 Info Mata Kuliah:** {advice['desc']}
+                            
+                            ---
+                            {advice['tip']}
+                            """)
 
-                    # Tombol Simpan Bookmark
-                    is_saved = any(b['Course'] == row['Course'] for b in st.session_state.bookmarks)
-                    if not is_saved:
-                        if st.button(f"🔖 Simpan", key=f"save_{idx}"):
-                            st.session_state.bookmarks.append(row.to_dict())
-                            st.rerun()
-                    else:
-                        st.button(f"✅ Tersimpan", key=f"saved_{idx}", disabled=True)
-                    
-                    st.markdown("<br>", unsafe_allow_html=True) # Spacer antar kartu
-            else:
-                st.warning("Tidak ditemukan yang cocok.")
+                        # Tombol Simpan Bookmark
+                        is_saved = any(b['Course'] == row['Course'] for b in st.session_state.bookmarks)
+                        if not is_saved:
+                            # Gunakan st.form untuk menghindari masalah tombol di Streamlit
+                            with st.form(key=f"save_form_{idx}"):
+                                if st.form_submit_button(f"🔖 Simpan", type="primary"):
+                                    st.session_state.bookmarks.append(row.to_dict())
+                                    st.rerun()
+                        else:
+                            st.button(f"✅ Tersimpan", key=f"saved_{idx}", disabled=True)
+                        
+                        st.markdown("<br>", unsafe_allow_html=True) # Spacer antar kartu
+                else:
+                    st.warning("Tidak ditemukan yang cocok. Coba ganti kata kunci atau hapus filter.")
 
-    # 4. INFO TAMBAHAN
+    # 5. INFO TAMBAHAN
     st.markdown("---")
     col_exp1, col_exp2 = st.columns(2)
     
@@ -609,15 +660,15 @@ def main_app():
             **Sistem Rekomendasi Mata Kuliah UBM** menggunakan algoritma *TF-IDF & Cosine Similarity* untuk mencocokkan minat kamu dengan kurikulum yang tersedia.
             
             📊 Total Database: 356 mata kuliah
-                        
+            
             🎯 Algoritma: TF-IDF + Cosine Similarity
-                        
+            
             🧠 Smart Search: Keyword Expansion
-                        
+            
             🎓 Program Studi: 12 jurusan
-                        
+            
             📅 Semester: 1 - 8
-                        
+            
             Sistem ini menggunakan AI untuk menemukan mata kuliah yang paling sesuai dengan minat dan hobi Anda!
             """)
 

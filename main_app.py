@@ -3,7 +3,6 @@ import pandas as pd
 import re
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
-# from textblob import TextBlob # TextBlob dihilangkan karena tidak digunakan dan menambah dependensi
 from itertools import chain
 
 # ==========================================
@@ -60,7 +59,6 @@ PROGRAM_DESCRIPTIONS = {
     "Psikologi": "Mempelajari perilaku manusia dan proses mental untuk kesejahteraan individu dan organisasi."
 }
 
-# Fungsi untuk mendapatkan keyword utama yang akan ditampilkan di multiselect
 def get_main_keywords():
     return sorted(list(KEYWORD_MAPPING.keys()))
 
@@ -71,12 +69,10 @@ def get_main_keywords():
 @st.cache_data
 def load_data():
     """Memuat data mata kuliah dari file CSV."""
-    # Pastikan nama file ini sama persis dengan file di repository Anda
     file_name = 'List Mata Kuliah UBM.xlsx - Sheet1.csv' 
     try:
         df = pd.read_csv(file_name)
         df = df.dropna()
-        # Menggabungkan nama mata kuliah dan program untuk fitur pencarian
         df['combined_features'] = df['Course'].astype(str) + ' ' + df['Program'].astype(str)
         return df
     except FileNotFoundError:
@@ -145,10 +141,8 @@ def process_negation(user_input):
         matches = re.finditer(pattern, cleaned_text)
         for match in matches:
             if len(match.groups()) >= 2:
-                # Ambil kata yang dinegasikan
                 negated_word = match.group(len(match.groups()))
                 words_to_remove.append(negated_word)
-                # Hapus frase negasi dari teks agar tidak ikut di-query
                 cleaned_text = cleaned_text.replace(match.group(0), '')
     
     if words_to_remove:
@@ -176,13 +170,9 @@ def expand_query(user_query, selected_keywords=None):
     return expanded_query
 
 def forced_recommendation_based_on_keyword(selected_keywords, df_filtered):
-    """
-    Memberikan rekomendasi paksa untuk Program Studi yang paling terkait dengan keyword
-    yang dipilih, jika pencarian utama (similarity) gagal.
-    """
+    """Memberikan rekomendasi paksa jika pencarian utama (similarity) gagal."""
     program_match = []
     
-    # Map keyword ke Program Studi yang Relevan
     keyword_to_program = {
         'film': ['Ilmu Komunikasi', 'Desain Komunikasi Visual', 'Desain Interaktif'],
         'komunikasi': ['Ilmu Komunikasi'],
@@ -208,9 +198,8 @@ def forced_recommendation_based_on_keyword(selected_keywords, df_filtered):
         df_forced = df_filtered[df_filtered['Program'].isin(unique_programs)].copy()
         
         if not df_forced.empty:
-            # Ambil 5 mata kuliah unik dari program-program ini
+            # Ambil 5 mata kuliah unik, gunakan random_state agar hasil konsisten
             if len(df_forced) > 5:
-                # Gunakan sample(min(len(df_forced), 5)) untuk mencegah error jika df_forced < 5
                 return df_forced.sample(min(len(df_forced), 5), random_state=1)[['Program', 'Semester', 'Course']]
             else:
                 return df_forced[['Program', 'Semester', 'Course']]
@@ -225,7 +214,6 @@ def get_recommendations(user_query, df_filtered, words_to_remove=None, selected_
     if df_filtered.empty:
         return pd.DataFrame()
     
-    # 1. Proses Negasi (Menghindari kata yang tidak disukai)
     if words_to_remove:
         for word in words_to_remove:
             df_filtered = df_filtered[~df_filtered['combined_features'].str.lower().str.contains(word, na=False)]
@@ -233,17 +221,14 @@ def get_recommendations(user_query, df_filtered, words_to_remove=None, selected_
     if df_filtered.empty:
         return pd.DataFrame()
 
-    # 2. Perluas Query
     expanded_query = expand_query(user_query, selected_keywords)
     
-    # 3. TF-IDF dan Cosine Similarity
     tfidf_vectorizer = TfidfVectorizer(stop_words='english')
-    # Gunakan try-except untuk menangani kasus input data yang terlalu sedikit (fit_transform error)
+    
     try:
         tfidf_matrix = tfidf_vectorizer.fit_transform(df_filtered['combined_features'])
         query_vec = tfidf_vectorizer.transform([expanded_query])
     except ValueError:
-        # Ini terjadi jika df_filtered['combined_features'] hanya berisi satu jenis teks atau kosong
         return pd.DataFrame() 
     
     cosine_similarities = cosine_similarity(query_vec, tfidf_matrix).flatten()
@@ -251,22 +236,19 @@ def get_recommendations(user_query, df_filtered, words_to_remove=None, selected_
     df_results = df_filtered.copy()
     df_results['Similarity Score'] = cosine_similarities
     
-    # 4. Filter dan Sortir Hasil
     df_results = df_results[df_results['Similarity Score'] > 0]
     df_results = df_results.sort_values('Similarity Score', ascending=False).head(top_n)
     
-    # 5. Logika Rekomendasi Paksa
-    # Jika hasil similarity kosong (semua skor 0) DAN ada keyword yang dipilih
+    # Logika Rekomendasi Paksa
     if df_results.empty and selected_keywords:
         st.info("⚠️ Pencarian Kosong. Mencoba rekomendasi paksa berdasarkan Keyword Pembantu...")
         df_forced = forced_recommendation_based_on_keyword(selected_keywords, df_filtered)
         if not df_forced.empty:
-            df_forced['Similarity Score'] = 1.0 # Beri skor tinggi secara artifisial
+            df_forced['Similarity Score'] = 1.0 
             df_forced = df_forced.rename(columns={'Course': 'Course', 'Program': 'Program', 'Semester': 'Semester'})
             df_results = df_forced
     
     if not df_results.empty:
-        # Formatting skor
         df_results['Similarity Score'] = (df_results['Similarity Score'] * 100).round(2)
         return df_results[['Program', 'Semester', 'Course', 'Similarity Score']]
         
@@ -276,7 +258,6 @@ def get_recommendations(user_query, df_filtered, words_to_remove=None, selected_
 # BAGIAN 3: USER INTERFACE (STREAMLIT APP)
 # ==========================================
 
-# Fungsi untuk halaman landing (Awal Aplikasi)
 def render_landing_page():
     st.markdown('<h1 style="text-align: center;">Selamat Datang di AI Course Advisor 🎓</h1>', unsafe_allow_html=True)
     st.markdown('<p style="text-align: center;">Temukan mata kuliah yang paling sesuai dengan minat dan passion kamu!</p>', unsafe_allow_html=True)
@@ -288,7 +269,9 @@ def render_landing_page():
     * **Spesifik:** Hasilnya berupa daftar mata kuliah yang relevan, bukan hanya nama jurusan.
     * **Informatif:** Dapatkan tips belajar dan deskripsi singkat jurusan terkait.
     """)
-    if st.button("Mulai Konsultasi Sekarang 🚀", use_column_width=True, type="primary"):
+    
+    # PERBAIKAN ERROR (MENGGANTI use_column_width=True)
+    if st.button("Mulai Konsultasi Sekarang 🚀", use_container_width=True, type="primary"):
         st.session_state['app_started'] = True
         st.rerun()
 
@@ -304,7 +287,7 @@ def main_app():
         st.title("🔍 Menu")
         if st.button("🏠 Home"):
             st.session_state['app_started'] = False
-            st.session_state.selected_keywords = [] # Reset keyword
+            st.session_state.selected_keywords = [] 
             st.rerun()
         
         st.markdown("---")
@@ -337,14 +320,14 @@ def main_app():
     st.markdown('<p style="text-align: center; color: #f0f0f0;">Ceritakan minatmu, dan AI akan mencarikan mata kuliah yang pas!</p>', unsafe_allow_html=True)
     st.markdown("<br>", unsafe_allow_html=True)
 
-    # 1. Filter logic
+    # Filter logic
     df_filtered = df.copy()
     if selected_program != "Semua Jurusan":
         df_filtered = df_filtered[df_filtered['Program'] == selected_program]
     if selected_semester != "Semua Semester":
         df_filtered = df_filtered[df_filtered['Semester'] == selected_semester]
 
-    # 2. INPUT SECTION
+    # INPUT SECTION
     c_in, c_btn = st.columns([4, 1])
     with c_in:
         user_input = st.text_area("Minat", placeholder="Contoh: Saya suka desain tapi tidak suka hitungan...", height=80, key="user_input_area", label_visibility="collapsed")
@@ -352,11 +335,10 @@ def main_app():
         st.markdown("<br>", unsafe_allow_html=True) 
         btn_cari = st.button("Cari 🚀")
     
-    # 3. SELECT KEYWORD SECTION
+    # SELECT KEYWORD SECTION
     st.markdown("### ✨ Keyword Pembantu (Opsional)")
     main_keywords = get_main_keywords()
     
-    # Gunakan st.session_state untuk mempertahankan nilai multiselect
     selected_keywords_update = st.multiselect(
         "Pilih kata kunci yang paling mewakili minatmu:",
         options=main_keywords,
@@ -365,7 +347,7 @@ def main_app():
     )
     st.session_state.selected_keywords = selected_keywords_update
 
-    # 4. HASIL PENCARIAN
+    # HASIL PENCARIAN
     st.markdown("---")
     if btn_cari:
         if not user_input and not st.session_state.selected_keywords:
@@ -405,7 +387,6 @@ def main_app():
                         col_save, _ = st.columns([1, 4])
                         with col_save:
                             if not is_saved:
-                                # Menggunakan form untuk mengatasi masalah rerun Streamlit
                                 with st.form(key=f"save_form_{idx}"):
                                     if st.form_submit_button(f"🔖 Simpan", type="primary"):
                                         st.session_state.bookmarks.append(row.to_dict())
@@ -421,9 +402,7 @@ def main_app():
 # BAGIAN 4: INICIALISASI
 # ==========================================
 
-# Fungsi main yang dipanggil saat aplikasi dijalankan
 def main():
-    # Konfigurasi Halaman
     st.set_page_config(
         page_title="AI Course Advisor",
         page_icon="🎓",
@@ -439,7 +418,6 @@ def main():
     if 'selected_keywords' not in st.session_state:
         st.session_state['selected_keywords'] = []
 
-    # Render halaman
     if not st.session_state['app_started']:
         render_landing_page()
     else:
